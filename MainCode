@@ -1,0 +1,360 @@
+import openpyxl
+from tkinter import *
+from tkinter import filedialog
+from tkinter.messagebox import *
+from glob import glob
+import os
+import pandas as pd
+import subprocess
+
+#Метод выгрузки данных
+def folder(fold,pth,filenames):
+	if fold == True:
+		filenames = glob(os.path.join(pth, "*.py"))
+	elif fold == False:
+		for root, dirs, files in os.walk(pth):
+			files = [f for f in files if not f[0] == '.']
+			dirs[:] = [d for d in dirs if not d[0] == '.']
+			for file in files:
+				if(file.endswith(".py")):
+					filenames.append(os.path.join(root,file))
+	return filenames
+
+#Параметры и формат сохранения
+def save(df,xl,pthEnd):
+	if xl == True:
+		df.to_excel(os.path.join(pthEnd, "CodeMine_Result.xlsx"))
+	elif xl == False:
+		df.to_csv(os.path.join(pthEnd, "CodeMine_Result.csv"), encoding="windows-1251", sep="~")
+
+#Обработка переменных
+def perem():
+	global row_in_dataframe, strategy, path, counterP, per, p, df
+	df.at[row_in_dataframe,'Стратегия']=strategy
+	df.at[row_in_dataframe,'Путь']=path
+	df.at[row_in_dataframe,'Номер строки фрагмента']=counterP
+	df.at[row_in_dataframe,'Тип фрагмента']='Переменные'
+	df.at[row_in_dataframe,'Фрагмент']=per
+	row_in_dataframe+=1
+	per=''
+	p=0
+	pass
+
+#Обработка остальных фрагментов
+def dfwrite(fragm):
+	global row_in_dataframe, strategy, path, counter, i, df
+	df.at[row_in_dataframe,'Стратегия']=strategy
+	df.at[row_in_dataframe,'Путь']=path
+	df.at[row_in_dataframe,'Номер строки фрагмента']=counter
+	df.at[row_in_dataframe,'Тип фрагмента']=fragm
+	df.at[row_in_dataframe,'Фрагмент']=i
+	row_in_dataframe+=1
+	pass
+
+#Обработка Return
+def reter():
+	global row_in_dataframe, strategy, path, counter, ret, r
+	df.at[row_in_dataframe,'Стратегия']=strategy
+	df.at[row_in_dataframe,'Путь']=path
+	df.at[row_in_dataframe,'Номер строки фрагмента']=counter
+	df.at[row_in_dataframe,'Тип фрагмента']='Return'
+	df.at[row_in_dataframe,'Фрагмент']=ret
+	row_in_dataframe+=1
+	ret=''
+	r=0
+	pass
+
+# Тело обработки
+def worker():
+	global path_to_entry, path_entry, name_entry, format_entry, fold_entry
+	global strategy,xl,fold,pthEnd,pth,df,count_num,counter_hist,row_in_dataframe,row_in_dataframe2,path
+	global counter,counterP,st,nf,switch,i,ret, per, usl, func, ish, z, r, f, y, p, var1,var2
+	#Указать путь до файлов
+	pth = str(path_entry.get())
+	#Укажите, куда сохранить результат
+	pthEnd = str(path_to_entry.get()).replace('/','\\')
+	#Считывать файлы только в указанной папке или в папке и подпапках. True - только в папке, False - и в подпапках
+	fold = var1.get() #fold_entry
+	#Установили openpyxl для сохранения в xls? Если нет, результат будет сохранен в .csv
+	#True - .xlsx, False - .csv
+	xl = var2.get() #format_entry
+	#Укажите название стратегии
+	strategy = str(name_entry.get())
+
+	# Создаем DataFrame с соответвующими колонками
+	col = ['Стратегия', 'Путь', 'Исходная функция', 'Номер строки фрагмента', 'Тип фрагмента', 'Фрагмент']
+	df = pd.DataFrame(columns=col)
+
+	# Объявляем переменные
+
+	li, filenames = [], []
+
+	filenames = folder(fold, pth, filenames)
+
+	count_num = 1
+	counter_hist = 0
+	row_in_dataframe = 0
+	row_in_dataframe2 = 0
+
+	z, r, f, y, p = 0, 0, 0, 0, 0
+
+	ret, per, usl, func, ish = '', '', '', '', ''
+
+	# Открываем файлы
+	for filename in filenames:
+		if per != '':
+			perem()
+
+		if ret != '':
+			reter()
+		df.at[row_in_dataframe2, 'Исходная функция'] = ish
+		counter,counterP = 0,0
+		st = 0
+		nf = 0
+		switch = 0
+		with open(f"{filename}", "r", encoding="utf-8") as my_code:
+			name = os.path.basename(f"{filename}")
+			path = os.path.abspath(f"{filename}")
+			print(name)
+			print(path)
+			# Построково читаем файл
+			for i in my_code:
+				counter += 1
+				# Обрабатываем строку
+				i = i.strip(' ')
+				# Проверка для записи исходной строки
+				if 'def ' not in i:
+					ish += i
+				# Обрабатываем комментарии
+				if i[0] == '#':
+					if per != '':
+						perem()
+					# Заполняем IF не в одну строку
+					if y == 1:
+						df.at[row_in_dataframe, 'Стратегия'] = strategy
+						df.at[row_in_dataframe, 'Путь'] = path
+						df.at[row_in_dataframe, 'Номер строки фрагмента'] = counter
+						df.at[row_in_dataframe, 'Тип фрагмента'] = 'Условие IF'
+						df.at[row_in_dataframe, 'Фрагмент'] = usl
+						row_in_dataframe += 1
+						usl = ''
+						y = 0
+
+					dfwrite('Комментарий')
+
+				# Обрабатываем пустые строки
+				elif i.strip('\n') == '':
+					continue
+
+				elif 'import ' in i.lower():
+					if per != '':
+						perem()
+
+					if ret != '':
+						reter()
+
+					dfwrite('Модуль')
+					r = 0
+				# Обрабатываем функции
+				elif 'def ' in i.lower():
+					if per != '':
+						perem()
+					r = 0
+
+					if ret != '':
+						reter()
+					if switch == 0:
+						ish = i
+						switch = 1
+					else:
+
+						df.at[row_in_dataframe2, 'Исходная функция'] = ish
+						ish = i
+					row_in_dataframe2 = row_in_dataframe
+
+					dfwrite('Функция')
+
+				# Обрабатываем циклы
+				elif 'while ' in i.lower():
+					if per != '':
+						perem()
+
+					if ret != '':
+						reter()
+
+					dfwrite('Цикл')
+					r = 0
+				elif 'for ' in i.lower():
+					if per != '':
+						perem()
+
+					if ret != '':
+						reter()
+
+					dfwrite('Цикл')
+					r = 0
+				# Обрабатываем return
+				elif 'return ' in i.lower():
+					if per != '':
+						perem()
+
+					ret += i
+					r = 1
+				elif r == 1:
+					ret += i
+				# Обрабатываем else
+				elif 'else' in i.lower():
+					if ':' in i:
+						if per != '':
+							perem()
+						if ret != '':
+							reter()
+						dfwrite('Условие If')
+						p = 0
+					else:
+						usl += i
+						y = 1
+						p = 0
+				# Контроль IF с условием на несколько строк
+				elif y == 1:
+					usl += i
+					if (':' in i):  # or ('else ' in i)
+						if per != '':
+							perem()
+						if ret != '':
+							reter()
+						df.at[row_in_dataframe, 'Стратегия'] = strategy
+						df.at[row_in_dataframe, 'Путь'] = path
+						df.at[row_in_dataframe, 'Номер строки фрагмента'] = counter
+						df.at[row_in_dataframe, 'Тип фрагмента'] = 'IF не в одну строку'
+						df.at[row_in_dataframe, 'Фрагмент'] = usl
+						row_in_dataframe += 1
+						usl = ''
+						y = 0
+				# Обрабатываем переменные
+				elif ('=' in i) and (('if ' or 'else' or 'elif ') not in i):
+					y = 0
+					p = 1
+					per += i
+					counterP=counter
+
+				elif (p == 1) and (('if ' or 'else' or 'elif ') not in i):
+					per += i
+
+				# Обрабатываем IF с условием в одну строку
+				elif (('if ' or 'else' or 'elif ') in i) and (':' in i):
+					if per != '':
+						perem()
+					if ret != '':
+						reter()
+					dfwrite('Условие If')
+					p = 0
+				# Начинаем обработку IF с условиями на несколько строк
+				elif (('if ' or 'elif ' or 'else') in i) and (':' not in i):
+					usl += i
+					y = 1
+					p = 0
+	# Заполняем последнюю исходную функцию
+	df.at[row_in_dataframe2, 'Исходная функция'] = ish
+	if per != '':
+		perem()
+	if ret != '':
+		reter()
+
+	# Сохраняем полученный DataFrame
+	save(df, xl, pthEnd)
+	resultMess = askyesno(title="Разбор выполнен успешно", message="Открыть полученный файл?")
+	if resultMess == True:
+		if xl == True:
+			os.startfile(os.path.join(pthEnd, "CodeMine_Result.xlsx"))
+		else:
+			os.startfile(os.path.join(pthEnd, "CodeMine_Result.csv"))
+
+def open_dir1():
+	global path_entry,filepath1
+	path_entry.delete(0, END)
+	filepath1 = filedialog.askdirectory()
+	path_entry.insert(0,filepath1)
+
+
+def open_dir2():
+	global path_to_entry,filepath2
+	path_to_entry.delete(0,END)
+	filepath2 = filedialog.askdirectory()
+	path_to_entry.insert(0,filepath2)
+
+if __name__ == "__main__":
+	root = Tk()
+	root.geometry('600x400')
+	root.title("Разбор риск-стратегий")
+	var1 = BooleanVar()
+	var1.set(False)
+	var2 = BooleanVar()
+	var2.set(False)
+
+	lbl = Label(text="Задайте параметры")
+	lbl.pack()
+
+	frame1 = Frame(borderwidth=1, relief=SOLID)
+	path_label = Label(frame1,text="Введите путь до риск-стратегии")
+	path_label.pack(anchor=NW)
+
+	path_entry = Entry(frame1, width=50)
+	path_entry.pack(anchor=NW)
+
+	open_button = Button(frame1,text="Открыть проводник", command=open_dir1)
+	open_button.pack(anchor=NW)
+
+	frame1.pack(anchor=NW, fill=X, padx=5, pady=5)
+
+	frame2 = Frame(borderwidth=1, relief=SOLID)
+	path_to_label = Label(frame2, text="Введите путь сохранения результата")
+	path_to_label.pack(anchor=NW)
+
+	path_to_entry = Entry(frame2, width=50)
+	path_to_entry.pack(anchor=NW)
+
+	open_button = Button(frame2,text="Открыть проводник", command=open_dir2)
+	open_button.pack(anchor=NW)
+
+	frame2.pack(anchor=NW, fill=X, padx=5, pady=5)
+
+	frame3 = Frame(borderwidth=1, relief=SOLID)
+	fold_label = Label(frame3, text="Считывать файлы только в указанной папке или в папке и подпапках")
+	fold_label.pack(anchor=NW)
+
+	fold_entry = Checkbutton(frame3, text = "√ - только в папке, ¤ - и в подпапках", variable=var1, onvalue=True, offvalue=False)
+	fold_entry.pack(anchor=NW)
+
+	frame3.pack(anchor=NW, fill=X, padx=5, pady=5)
+
+	frame4 = Frame(borderwidth=1, relief=SOLID)
+	format_label = Label(frame4, text="Выберите формат сохранения результата")
+	format_label.pack(anchor=NW)
+
+	format_entry = Checkbutton(frame4, text = "√ - .xlsx, ¤ - .csv", variable=var2, onvalue=True, offvalue=False)
+	format_entry.pack(anchor=NW)
+
+	frame4.pack(anchor=NW, fill=X, padx=5, pady=5)
+
+	frame5 = Frame(borderwidth=1, relief=SOLID)
+	name_label = Label(frame5, text="Укажите название разбираемой риск-стратегии")
+	name_label.pack(anchor=NW)
+
+	name_entry = Entry(frame5, width=50)
+	name_entry.pack(anchor=NW)
+
+	frame5.pack(anchor=NW, fill=X, padx=5, pady=5)
+
+	frame6 = Frame(borderwidth=0, relief=SOLID)
+
+	start_entry = Button(frame6, text="Запустить", command=worker)
+	start_entry.pack(anchor=NW)
+
+	frame6.pack(anchor=NW, fill=X, padx=5, pady=5)
+
+
+
+
+
+	root.mainloop()
